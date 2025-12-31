@@ -1,0 +1,18 @@
+version: 1.0
+runtime: python311
+build:
+  commands:
+    build:
+      - pip install -r requirements-aws.txt
+run:
+  runtime-version: 3.11
+  command: gunicorn app.main:app --bind 0.0.0.0:8080 --workers 1 --threads 8 --worker-class uvicorn.workers.UvicornWorker --timeout 0
+  network:
+    port: 8080
+  env:
+    - name: ENVIRONMENT
+      value: "production"
+    - name: PORT
+      value: "8080"
+    - name: USE_GPU
+      value: "false"
