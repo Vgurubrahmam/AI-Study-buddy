@@ -41,7 +41,7 @@ class GeminiClient:
         
         try:
             genai.configure(api_key=self.api_keys[0])
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
+            self.model = genai.GenerativeModel("gemini-pro")
             self._initialized = True
             logger.info("Gemini client initialized successfully")
         except Exception as e:
