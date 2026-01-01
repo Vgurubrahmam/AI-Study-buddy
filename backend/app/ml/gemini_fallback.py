@@ -3,13 +3,23 @@ Gemini Fallback Client
 Fallback to Google Gemini API when Phi-3 is unavailable or for comparison
 """
 
-import google.generativeai as genai
 from typing import Optional, Tuple
 import logging
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Try importing the new SDK first, fall back to old one
+try:
+    from google import genai
+    from google.genai import types
+    USE_NEW_SDK = True
+    logger.info("Using new google-genai SDK")
+except ImportError:
+    import google.generativeai as genai
+    USE_NEW_SDK = False
+    logger.info("Using legacy google-generativeai SDK")
 
 
 class GeminiClient:
@@ -19,7 +29,8 @@ class GeminiClient:
     """
     
     def __init__(self):
-        self.model = None
+        self.client = None
+        self.model_name = None
         self.current_key_index = 0
         self.api_keys = []
         self._initialized = False
@@ -40,12 +51,37 @@ class GeminiClient:
             return
         
         try:
-            genai.configure(api_key=self.api_keys[0])
-            self.model = genai.GenerativeModel("gemini-pro")
-            self._initialized = True
-            logger.info("Gemini client initialized successfully")
+            if USE_NEW_SDK:
+                self._init_new_sdk()
+            else:
+                self._init_legacy_sdk()
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {e}")
+    
+    def _init_new_sdk(self):
+        """Initialize with new google-genai SDK"""
+        self.client = genai.Client(api_key=self.api_keys[0])
+        model_names = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]
+        for model_name in model_names:
+            self.model_name = model_name
+            self._initialized = True
+            logger.info(f"Gemini client initialized with model: {model_name}")
+            break
+    
+    def _init_legacy_sdk(self):
+        """Initialize with legacy google-generativeai SDK"""
+        genai.configure(api_key=self.api_keys[0])
+        model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        for model_name in model_names:
+            try:
+                self.client = genai.GenerativeModel(model_name)
+                self.model_name = model_name
+                self._initialized = True
+                logger.info(f"Gemini client initialized with model: {model_name}")
+                break
+            except Exception as e:
+                logger.warning(f"Model {model_name} not available: {e}")
+                continue
     
     def _switch_api_key(self):
         """Switch to the next available API key"""
@@ -53,7 +89,12 @@ class GeminiClient:
             return False
         
         self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
-        genai.configure(api_key=self.api_keys[self.current_key_index])
+        
+        if USE_NEW_SDK:
+            self.client = genai.Client(api_key=self.api_keys[self.current_key_index])
+        else:
+            genai.configure(api_key=self.api_keys[self.current_key_index])
+        
         logger.info(f"Switched to Gemini API key {self.current_key_index + 1}")
         return True
     
@@ -64,51 +105,45 @@ class GeminiClient:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None
     ) -> Tuple[str, dict]:
-        """
-        Generate a response using Gemini API.
-        
-        Args:
-            prompt: User's input message
-            system_prompt: Optional system context
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            
-        Returns:
-            Tuple of (response_text, token_usage)
-        """
+        """Generate a response using Gemini API."""
         if not self._initialized:
             self.initialize()
         
-        if not self._initialized or not self.model:
+        if not self._initialized:
             raise RuntimeError("Gemini client not available")
         
         max_tokens = max_tokens or settings.max_tokens
         temperature = temperature or settings.temperature
         
-        # Build full prompt with system context
         system_text = system_prompt or "You are an intelligent AI Study Buddy, an educational assistant designed to help students learn effectively. You provide clear, accurate, and helpful explanations on various academic topics. Be encouraging, patient, and thorough in your responses."
         full_prompt = f"{system_text}\n\nUser: {prompt}\n\nAssistant:"
         
-        generation_config = genai.types.GenerationConfig(
-            max_output_tokens=max_tokens,
-            temperature=temperature
-        )
-        
-        # Try generation with fallback
         for attempt in range(len(self.api_keys)):
             try:
-                response = self.model.generate_content(
-                    full_prompt,
-                    generation_config=generation_config
-                )
+                if USE_NEW_SDK:
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=full_prompt,
+                        config=types.GenerateContentConfig(
+                            max_output_tokens=max_tokens,
+                            temperature=temperature
+                        )
+                    )
+                    response_text = response.text
+                else:
+                    generation_config = genai.types.GenerationConfig(
+                        max_output_tokens=max_tokens,
+                        temperature=temperature
+                    )
+                    response = self.client.generate_content(
+                        full_prompt,
+                        generation_config=generation_config
+                    )
+                    response_text = response.text
                 
-                # Extract text
-                response_text = response.text
-                
-                # Token usage (approximate)
                 token_usage = {
-                    "input": len(full_prompt.split()) * 1.3,  # Approximate
-                    "output": len(response_text.split()) * 1.3
+                    "input": int(len(full_prompt.split()) * 1.3),
+                    "output": int(len(response_text.split()) * 1.3)
                 }
                 
                 return response_text, token_usage
@@ -127,7 +162,6 @@ class GeminiClient:
         return self._initialized and bool(self.api_keys)
 
 
-# Singleton instance
 _gemini_client: Optional[GeminiClient] = None
 
 
