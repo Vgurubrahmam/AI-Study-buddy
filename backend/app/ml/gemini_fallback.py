@@ -61,7 +61,8 @@ class GeminiClient:
     def _init_new_sdk(self):
         """Initialize with new google-genai SDK"""
         self.client = genai.Client(api_key=self.api_keys[0])
-        model_names = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]
+        # Prioritize models with better free tier limits
+        model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
         for model_name in model_names:
             self.model_name = model_name
             self._initialized = True
