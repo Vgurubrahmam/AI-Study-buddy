@@ -26,15 +26,22 @@ _gemini_available = None
 
 
 def check_ml_available():
-    """Check if ML dependencies (torch) are available"""
+    """Check if ML dependencies (torch) are available and enabled"""
     global _ml_available
     if _ml_available is None:
+        # Check if local model is disabled via environment
+        import os
+        if os.environ.get("SKIP_LOCAL_MODEL", "").lower() in ("true", "1", "yes"):
+            _ml_available = False
+            logger.info("Local ML model disabled via SKIP_LOCAL_MODEL env var - using Gemini only")
+            return _ml_available
         try:
             import torch
             _ml_available = True
         except ImportError:
             _ml_available = False
             logger.warning("PyTorch not installed - Phi-3 and RAG disabled, using Gemini only")
+    return _ml_available
     return _ml_available
 
 
