@@ -61,8 +61,8 @@ class GeminiClient:
     def _init_new_sdk(self):
         """Initialize with new google-genai SDK"""
         self.client = genai.Client(api_key=self.api_keys[0])
-        # Use models available in the new SDK - gemini-1.5-flash-latest works
-        model_names = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
+        # Use models available from ListModels API
+        model_names = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest"]
         for model_name in model_names:
             self.model_name = model_name
             self._initialized = True
