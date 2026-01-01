@@ -63,8 +63,8 @@ venv.bak/
 *.swp
 *.swo
 
-# Models and data
-models/
+# Models and data (only root models folder, not app/models)
+/models/
 training_data/
 chroma_db/
 *.pt
